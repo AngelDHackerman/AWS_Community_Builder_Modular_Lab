@@ -1,3 +1,5 @@
+# Serverlss Task API Project
+
 ## 1. Arquitectura del módulo
 
 Flujo:
@@ -26,7 +28,7 @@ Arquitectura:
     X-Ray Tracing
 ```
 
-## 2. ¿Para qué se usa esta arquitectura en el mundo real?
+### 2. ¿Para qué se usa esta arquitectura en el mundo real?
 
 Este patrón es muy común en startups y microservicios.
 
@@ -38,7 +40,7 @@ Este patrón es muy común en startups y microservicios.
 | Event ingestion      | Guardar eventos de aplicaciones |
 | Config service       | Guardar configuraciones         |
 
-## 3. API Gateway (la puerta de entrada)
+### 3. API Gateway (la puerta de entrada)
 
 API Gateway es el servicio que expone una API HTTP pública.
 
@@ -50,7 +52,7 @@ Funciones principales:
     ✔ Rate limiting
     ✔ Integración con Lambda
 
-## 4. AWS Lambda (backend serverless)
+### 4. AWS Lambda (backend serverless)
 
 Lambda es donde vive la lógica de la aplicación.
 
@@ -66,7 +68,7 @@ Lambda:
     ✔ procesa lógica
     ✔ guarda datos
 
-## 5. DynamoDB (base de datos serverless)
+### 5. DynamoDB (base de datos serverless)
 
 DynamoDB es una base de datos NoSQL totalmente administrada.
 
@@ -86,7 +88,7 @@ Operaciones comunes:
 | Update | UpdateItem |
 | Delete | DeleteItem |
 
-## 6. ¿Por qué usar S3 backup?
+### 6. ¿Por qué usar S3 backup?
 
 Aunque DynamoDB es confiable, muchas empresas:
 
@@ -103,6 +105,50 @@ Ventajas:
 * analytics con Athena
 * ML training data
 
-## 7. CloudWatch 
+### 7. CloudWatch 
 
-## 8. X-Ray Tracing 
+### 8. X-Ray Tracing 
+
+## API Endpoints y Estructura JSON
+
+Endpoints: 
+
+* `GET /tasks` → obtener todas las tareas
+* `GET /tasks/{task_id}` → obtener una tarea específica
+* `POST /tasks` → crear una nueva tarea
+* `PATCH /tasks/{task_id}` → editar parcialmente una tarea
+* `DELETE /tasks/{task_id}` → eliminar una tarea
+
+Ejemplo de un item __"Task"__ en DynamoDB: 
+
+```json
+{
+  "task_id": "123",
+  "title": "Study AWS Lambda",
+  "status": "pending",
+  "created_at": "2026-03-09T15:00:00Z",
+  "updated_at": "2026-03-09T15:00:00Z"
+}
+```
+
+Ejemplo de un item __"Log"__ a S3: 
+
+
+```json
+{
+  "event_type": "task_created",
+  "task_id": "123",
+  "timestamp": "2026-03-09T15:00:00Z",
+  "payload": {
+    "title": "Study AWS Lambda",
+    "status": "pending"
+  }
+}
+```
+
+En el backup de S3 se iran todos los eventos: `POST, PATCH, DELETE`. El evento `GET` se quedara solo en ClouWatch por simplicidad.
+
+* Usario que solicita las task
+
+Estoy simulando un backend serverless donde un cliente consume una API en API Gateway. Esa API invoca una Lambda, la cual puede leer o escribir datos en DynamoDB. La Lambda genera logs en CloudWatch, puede guardar backups o eventos en S3, y opcionalmente se integra con X-Ray para tracing y observability.
+
