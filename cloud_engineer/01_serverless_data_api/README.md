@@ -50,3 +50,18 @@ Funciones principales:
     ✔ Rate limiting
     ✔ Integración con Lambda
 
+## 4. AWS Lambda (backend serverless)
+
+Lambda es donde vive la lógica de la aplicación.
+
+Ventajas:
+
+* no hay servidores
+* escala automáticamente
+* pagas por ejecución
+
+Lambda:
+
+    ✔ recibe request
+    ✔ procesa lógica
+    ✔ guarda datos
