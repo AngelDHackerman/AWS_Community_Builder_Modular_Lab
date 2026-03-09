@@ -26,3 +26,15 @@ Arquitectura:
     X-Ray Tracing
 ```
 
+## 2. ¿Para qué se usa esta arquitectura en el mundo real?
+
+Este patrón es muy común en startups y microservicios.
+
+| Caso                 | Qué hace                        |
+| -------------------- | ------------------------------- |
+| API de usuarios      | Crear, editar o leer usuarios   |
+| Backend de app móvil | Guardar sesiones, preferencias  |
+| API de IoT           | Registrar sensores              |
+| Event ingestion      | Guardar eventos de aplicaciones |
+| Config service       | Guardar configuraciones         |
+
