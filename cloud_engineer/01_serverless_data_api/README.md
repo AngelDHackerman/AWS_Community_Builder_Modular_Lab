@@ -65,3 +65,24 @@ Lambda:
     ✔ recibe request
     ✔ procesa lógica
     ✔ guarda datos
+
+## 5. DynamoDB (base de datos serverless)
+
+DynamoDB es una base de datos NoSQL totalmente administrada.
+
+Ventajas:
+
+* escala automáticamente
+* latencia muy baja
+* no necesitas servidores
+* altamente disponible
+
+Operaciones comunes:
+
+| Acción | API        |
+| ------ | ---------- |
+| Create | PutItem    |
+| Read   | GetItem    |
+| Update | UpdateItem |
+| Delete | DeleteItem |
+
