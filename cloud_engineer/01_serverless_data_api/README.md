@@ -38,3 +38,15 @@ Este patrón es muy común en startups y microservicios.
 | Event ingestion      | Guardar eventos de aplicaciones |
 | Config service       | Guardar configuraciones         |
 
+## 3. API Gateway (la puerta de entrada)
+
+API Gateway es el servicio que expone una API HTTP pública.
+
+Funciones principales:
+
+    ✔ Recibir requests HTTP
+    ✔ Autenticación (IAM, Cognito, API keys)
+    ✔ Routing
+    ✔ Rate limiting
+    ✔ Integración con Lambda
+
