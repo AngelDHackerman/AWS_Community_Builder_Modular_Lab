@@ -86,3 +86,23 @@ Operaciones comunes:
 | Update | UpdateItem |
 | Delete | DeleteItem |
 
+## 6. ¿Por qué usar S3 backup?
+
+Aunque DynamoDB es confiable, muchas empresas:
+
+    ✔ guardan logs
+    ✔ guardan eventos
+    ✔ guardan snapshots
+
+en S3 buckets. 
+
+Ventajas:
+
+* auditoría
+* data lake
+* analytics con Athena
+* ML training data
+
+## 7. CloudWatch 
+
+## 8. X-Ray Tracing 
