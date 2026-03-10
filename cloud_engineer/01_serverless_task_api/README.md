@@ -184,8 +184,24 @@ En el backup de S3 se iran todos los eventos: `POST, PATCH, DELETE`. El evento `
 
 ## Lecciones Aprendidas
 
-## Puntos a mejorar
+1. Estoy simulando un backend serverless donde un cliente consume una API en API Gateway. Esa API invoca una Lambda, la cual puede leer o escribir datos en DynamoDB. La Lambda genera logs en CloudWatch, puede guardar backups o eventos en S3, y opcionalmente se integra con X-Ray para tracing y observability.
 
+2. Con HTTP API + JWT authorizer, API Gateway valida el token antes de invocar la Lambda. Puede validar firma, iss, aud/client_id, expiración y, si tú quieres, scopes. Además se puede aplicar el authorizer solo a ciertas rutas, así que los GET pueden quedar abiertos y las rutas de escritura protegidas.
+No usar API keys para esto: AWS dice explícitamente que no deben usarse para autenticación o autorización. Tampoco hay que usar IAM auth para este caso, porque en HTTP APIs obliga a firmar cada request con SigV4 y credenciales AWS, lo cual es más incómodo para un cliente “normal” de una API pública.
+La forma práctica es que el cliente inicia sesión en Cognito User Pool, Cognito devuelve access token / ID token / refresh token, y para autorizar la API se manda el token en Authorization: Bearer <token>. En Cognito, el access token es el destinado a autorizar operaciones de API.
+
+La arquitectura te quedaría así:
+* GET /tasks → sin auth
+* GET /tasks/{task_id} → sin auth
+* POST /tasks → JWT authorizer
+* PATCH /tasks/{task_id} → JWT authorizer
+* DELETE /tasks/{task_id} → JWT authorizer
+
+
+
+
+
+## Puntos a mejorar
 ### 1. Fast API en lugar de Lambda nativo de AWS.
 
 Como primer punto a mejorar sera el uso de `FastAPI` en lugar de lambda nativa para AWS. Con FastAPI podriamos crear una API mucho mas robusta y facil de mantener para backend devs.
@@ -193,6 +209,4 @@ Si se usa __FastAPI__ dentro de __Lambda__, normalmente se necesita un adaptador
 
 
 
-
-Estoy simulando un backend serverless donde un cliente consume una API en API Gateway. Esa API invoca una Lambda, la cual puede leer o escribir datos en DynamoDB. La Lambda genera logs en CloudWatch, puede guardar backups o eventos en S3, y opcionalmente se integra con X-Ray para tracing y observability.
 
