@@ -148,7 +148,51 @@ Ejemplo de un item __"Log"__ a S3:
 
 En el backup de S3 se iran todos los eventos: `POST, PATCH, DELETE`. El evento `GET` se quedara solo en ClouWatch por simplicidad.
 
-* Usario que solicita las task
+
+### Cómo sería la lógica de la API: 
+
+> GET /tasks
+
+* Lambda consulta DynamoDB
+* devuelve lista de tareas
+* registra log en CloudWatch
+
+> POST /tasks
+
+* Lambda recibe JSON
+* valida campos
+* crea task_id
+* guarda item en DynamoDB
+* guarda evento task_created en S3
+* registra log en CloudWatch
+
+> PATCH /tasks/{task_id}
+
+* Lambda busca la tarea
+* actualiza campos permitidos
+* guarda cambios en DynamoDB
+* guarda evento task_updated en S3
+* registra log en CloudWatch
+
+> DELETE /tasks/{task_id}
+
+* Lambda elimina item en DynamoDB
+* guarda evento task_deleted en S3
+* registra log en CloudWatch
+
+
+
+## Lecciones Aprendidas
+
+## Puntos a mejorar
+
+### 1. Fast API en lugar de Lambda nativo de AWS.
+
+Como primer punto a mejorar sera el uso de `FastAPI` en lugar de lambda nativa para AWS. Con FastAPI podriamos crear una API mucho mas robusta y facil de mantener para backend devs.
+Si se usa __FastAPI__ dentro de __Lambda__, normalmente se necesita un adaptador __ASGI__ como __Mangum__, que justamente existe para correr apps ASGI en AWS Lambda detrás de API Gateway, ALB o Function URLs.
+
+
+
 
 Estoy simulando un backend serverless donde un cliente consume una API en API Gateway. Esa API invoca una Lambda, la cual puede leer o escribir datos en DynamoDB. La Lambda genera logs en CloudWatch, puede guardar backups o eventos en S3, y opcionalmente se integra con X-Ray para tracing y observability.
 
