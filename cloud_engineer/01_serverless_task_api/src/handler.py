@@ -87,7 +87,7 @@ def lambda_handler(event, context):
             return get_task(task_id)
         
         if method == "GET":
-            return list_task()
+            return list_tasks()
         
         if method == "POST": 
             return create_task(event)
@@ -115,3 +115,189 @@ def lambda_handler(event, context):
     except Exception as e:
         logger.exception("Unhandled exception")
         return response(500, {"message": "Unexpected internal error", "error": str(e)})
+    
+def list_tasks():
+    result = table.scan()
+    items = result.get("Items", [])
+    
+    return response(
+        200,
+        {
+            "message": "Tasks retrieved successfully",
+            "count": len(items),
+            "tasks": items,
+            "timestamp": now_utc()
+        }
+    )
+    
+def get_task (task_id: str):
+    result = table.get_item(Key={"task_id": task_id})
+    item = result.get("Item")
+    
+    if not item:
+        return response(404, {"message": "Task not found", "task_id": task_id})
+
+    audit_event(
+        event_type="task_retrieved",
+        payload={"task_id": task_id}
+    )
+    
+    return response(
+        200,
+        {
+            "message": "Task retrieved successfully",
+            "task": item,
+            "timestamp": now_utc()
+        }
+    )
+    
+def create_task(event: dict):
+    claims = require_authenticated_claims(event)
+    body = parse_body(event)
+    
+    title = body.get("title")
+    if not title or not isinstance(title, str):
+        raise ValueError("Field 'title' is required and must be a string")
+    
+    status = body.get("status", "pending")
+    if status not in {"pending", "in_progress", "done"}:
+        raise ValueError("Field 'status' must be one of: pending, in_progress, done")
+    
+    task_id = str(uuid.uuid4())
+    ts = now_utc()
+    
+    actor_sub = claims.get("sub", "unknown")
+    actor_username = claims.get("username") or claims.get("cognito:username") or claims.get("email", "unknown")
+    
+    item = {
+        "task_id": task_id,
+        "title": title,
+        "status": status,
+        "created_at": ts,
+        "updated_at": ts,
+        "created_by": actor_sub,
+        "created_by_username": actor_username
+    }
+    
+    table.put_item(Item=item)
+    
+    audit_event(
+        event_type="task_created",
+        payload={
+            "task_id": task_id,
+            "actor_sub": actor_sub,
+            "actor_username": actor_username,
+            "task": item
+        }
+    )
+    
+    return response(
+        201,
+        {
+            "message": "Task created successfully",
+            "task": item,
+            "timestamp": ts
+        }
+    )
+    
+def update_task(event: dict, task_id: str):
+    claims = require_authenticated_claims(event)
+    body = parse_body(event)
+    
+    allowed_fields = {}
+    if "title" in body:
+        if not isinstance(body["title"], str) or not body["title"].strip():
+            raise ValueError("Field 'title' must be a non-empty string")
+        allowed_fields["title"] = body["title"]
+        
+    if "status" in body:
+        if body["status"] not in {"pending", "in_progress", "done"}:
+            raise ValueError("Field 'status' must be one of: pending, in_progress, done")
+        allowed_fields["status"] = body["status"]
+        
+    if not allowed_fields:
+        raise ValueError("Nothing to update. Provide 'title' and/or 'status'")
+    
+    actor_sub = claims.get("sub", "unknown")
+    ts = now_utc()
+    
+    expr_attr_names = {
+        "#updated_at": "updated_at",
+        "#updated_by": "updated_by"
+    }
+    expr_attr_values = {
+        ":updated_at": ts,
+        ":updated_by": actor_sub
+    }
+    set_parts = [
+        "#updated_at = :updated_at",
+        "#updated_by = :updated_by"
+    ]
+    
+    for field, value in allowed_fields.items():
+        expr_attr_names[f"#{field}"] = field
+        expr_attr_values[f":{field}"] = value
+        set_parts.append(f"#{field} = :{field}")
+
+    try:
+        result = table.update_item(
+            Key={"task_id": task_id},
+            UpdateExpression="SET " + ", ".join(set_parts),
+            ExpressionAttributeNames=expr_attr_names,
+            ExpressionAttributeValues=expr_attr_values,
+            ConditionExpression="attribute_exists(task_id)",
+            ReturnValues="ALL_NEW"
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            return response(404, {"message": "Task not found", "task_id": task_id})
+        raise
+
+    updated_item = result["Attributes"]
+
+    audit_event(
+        event_type="task_updated",
+        payload={
+            "task_id": task_id,
+            "actor_sub": actor_sub,
+            "changes": allowed_fields,
+            "task": updated_item
+        }
+    )
+    
+    return response(
+        200,
+        {
+            "message": "Task updated successfully",
+            "task": updated_item,
+            "timestamp": ts
+        }
+    )
+    
+def delete_task(event: dict, task_id: str):
+    claims = require_authenticated_claims(event)
+    actor_sub = claims.get("sub", "unknown")
+
+    existing = table.get_item(Key={"task_id": task_id}).get("Item")
+    if not existing:
+        return response(404, {"message": "Task not found", "task_id": task_id})
+
+    table.delete_item(Key={"task_id": task_id})
+
+    audit_event(
+        event_type="task_deleted",
+        payload={
+            "task_id": task_id,
+            "actor_sub": actor_sub,
+            "deleted_task": existing
+        }
+    )
+
+    return response(
+        200,
+        {
+            "message": "Task deleted successfully",
+            "task_id": task_id,
+            "timestamp": now_utc()
+        }
+    )
