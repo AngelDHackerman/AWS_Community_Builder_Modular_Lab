@@ -210,3 +210,9 @@ Si se usa __FastAPI__ dentro de __Lambda__, normalmente se necesita un adaptador
 
 
 
+Necesito estas 4 piezas:
+
+* Cognito User Pool + App Client
+* API Gateway HTTP API
+* JWT authorizer en API Gateway
+* Lambda + IAM + DynamoDB + S3
