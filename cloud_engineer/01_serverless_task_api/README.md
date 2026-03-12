@@ -206,13 +206,3 @@ La arquitectura te quedaría así:
 
 Como primer punto a mejorar sera el uso de `FastAPI` en lugar de lambda nativa para AWS. Con FastAPI podriamos crear una API mucho mas robusta y facil de mantener para backend devs.
 Si se usa __FastAPI__ dentro de __Lambda__, normalmente se necesita un adaptador __ASGI__ como __Mangum__, que justamente existe para correr apps ASGI en AWS Lambda detrás de API Gateway, ALB o Function URLs.
-
-
-
-
-Necesito estas 4 piezas:
-
-* Cognito User Pool + App Client
-* API Gateway HTTP API
-* JWT authorizer en API Gateway
-* Lambda + IAM + DynamoDB + S3
