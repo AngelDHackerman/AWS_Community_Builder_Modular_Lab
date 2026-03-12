@@ -12,8 +12,10 @@ logger.setLevel(logging.INFO)
 dynamodb = boto3.resource("dynamodb")
 s3 = boto3.client("s3")
 
-TASKS_TABLE_NAME = os.environ["TASKS_TABLE_NAME"]  # Se puede mejorar usando AWS Secrets Manager 
+# Es mejor usar variables de entorno, Secrets Manager es mas lento y costoso 
+TASKS_TABLE_NAME = os.environ["TASKS_TABLE_NAME"]  
 AUDIT_BUCKET_NAME = os.environ["AUDIT_BUCKET_NAME"]
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 
 table = dynamodb.Table(TASKS_TABLE_NAME)
 
