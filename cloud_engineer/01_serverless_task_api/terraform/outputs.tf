@@ -47,3 +47,13 @@ output "task_item_url_example" {
   description = "GET one task URL example"
   value       = "${aws_apigatewayv2_api.task_api.api_endpoint}/tasks/123"
 }
+
+output "tasks_table_name" {
+  description = "DynamoDB tasks table name"
+  value       = aws_dynamodb_table.tasks.name
+}
+
+output "tasks_table_arn" {
+  description = "DynamoDB tasks table ARN"
+  value       = aws_dynamodb_table.tasks.arn
+}

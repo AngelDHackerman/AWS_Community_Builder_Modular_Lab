@@ -33,14 +33,15 @@ resource "aws_lambda_function" "task_api" {
   environment {
     variables = {
       AUDIT_BUCKET_NAME = aws_s3_bucket.audit.bucket
+      TASKS_TABLE_NAME  = aws_dynamodb_table.tasks.name
       LOG_LEVEL         = "INFO"
-      # TASKS_TABLE_NAME = aws_dynamodb_table.tasks.name
     }
   }
 
   depends_on = [
     aws_iam_role_policy_attachment.lambda_basic_execution,
     aws_iam_role_policy_attachment.lambda_s3_audit_write,
+    aws_iam_role_policy_attachment.lambda_dynamodb_tasks_access,
     aws_cloudwatch_log_group.lambda
   ]
 
