@@ -27,3 +27,23 @@ output "lambda_function_arn" {
   description = "Lambda function ARN"
   value       = aws_lambda_function.task_api.arn
 }
+
+output "http_api_id" {
+  description = "HTTP API ID"
+  value       = aws_apigatewayv2_api.task_api.id
+}
+
+output "http_api_endpoint" {
+  description = "Base endpoint for the HTTP API"
+  value       = aws_apigatewayv2_api.task_api.api_endpoint
+}
+
+output "tasks_collection_url" {
+  description = "GET all tasks URL"
+  value       = "${aws_apigatewayv2_api.task_api.api_endpoint}/tasks"
+}
+
+output "task_item_url_example" {
+  description = "GET one task URL example"
+  value       = "${aws_apigatewayv2_api.task_api.api_endpoint}/tasks/123"
+}
