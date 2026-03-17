@@ -15,7 +15,7 @@ resource "aws_apigatewayv2_api" "task_api" {
 
   cors_configuration {
     allow_origins = ["*"]
-    allow_methods = ["GET", "OPTIONS"]
+    allow_methods = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
     allow_headers = ["content-type", "authorization"]
     max_age       = 300
   }
@@ -36,6 +36,19 @@ resource "aws_apigatewayv2_integration" "task_api_lambda" {
   timeout_milliseconds   = 30000
 }
 
+resource "aws_apigatewayv2_authorizer" "cognito_jwt" {
+  api_id           = aws_apigatewayv2_api.task_api.id
+  name             = "${var.project_name}-${var.environment}-cognito-jwt"
+  authorizer_type  = "JWT"
+  identity_sources = ["$request.header.Authorization"]
+
+  jwt_configuration {
+    audience = [aws_cognito_user_pool_client.task_api_client.id]
+    issuer   = "https://cognito-idp.${var.aws_region}.amazonaws.com/${aws_cognito_user_pool.task_api_users.id}"
+  }
+}
+
+# Apply security to specific routes in the API
 resource "aws_apigatewayv2_route" "get_tasks" {
   api_id    = aws_apigatewayv2_api.task_api.id
   route_key = "GET /tasks"
@@ -50,6 +63,33 @@ resource "aws_apigatewayv2_route" "get_task_by_id" {
   target    = "integrations/${aws_apigatewayv2_integration.task_api_lambda.id}"
 
   authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_route" "post_task" {
+  api_id    = aws_apigatewayv2_api.task_api.id
+  route_key = "POST /tasks"
+  target    = "integrations/${aws_apigatewayv2_integration.task_api_lambda.id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito_jwt.id
+}
+
+resource "aws_apigatewayv2_route" "patch_task_by_id" {
+  api_id    = aws_apigatewayv2_api.task_api.id
+  route_key = "PATCH /tasks/{task_id}"
+  target    = "integrations/${aws_apigatewayv2_integration.task_api_lambda.id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito_jwt.id
+}
+
+resource "aws_apigatewayv2_route" "delete_task_by_id" {
+  api_id    = aws_apigatewayv2_api.task_api.id
+  route_key = "DELETE /tasks/{task_id}"
+  target    = "integrations/${aws_apigatewayv2_integration.task_api_lambda.id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito_jwt.id
 }
 
 resource "aws_apigatewayv2_stage" "default" {
