@@ -79,44 +79,48 @@ def audit_event(event_type: str, payload: dict):
     )
     
 def lambda_handler(event, context):
-    logger.info("Incoming event: %s", json.dumps(event))
-    
-    method = get_method(event)
-    task_id = get_path_param(event, "task_id")
-    
-    try:
-        if method == "GET" and task_id:
-            return get_task(task_id)
-        
-        if method == "GET":
-            return list_tasks()
-        
-        if method == "POST": 
-            return create_task(event)
-        
-        if method == "PATCH" and task_id:
-            return update_task(event, task_id)
-        
-        if method == "DELETE" and task_id:
-            return delete_task(event, task_id)
-        
-        return response(405, {"message": "Method not allowed"})
-    
-    except PermissionError as e:
-        logger.warning("Unauthorized request: %s", str(e))
-        return response(401, {"message": str(e)})
-    
-    except ClientError as e:
-        logger.exception("AWS client error")
-        return response(500, {"message": "Internal AWS error", "error": str(e)})
-    
-    except ValueError as e:
-        logger.warning("Bad request: %s", str(e))
-        return response(400, {"message": str(e)})
-    
-    except Exception as e:
-        logger.exception("Unhandled exception")
-        return response(500, {"message": "Unexpected internal error", "error": str(e)})
+    method = event["requestContext"]["http"]["method"]
+    path_params = event.get("pathParameters") or {}
+    task_id = path_params.get("task_id")
+
+    jwt_claims = (
+        event.get("requestContext", {})
+             .get("authorizer", {})
+             .get("jwt", {})
+             .get("claims", {})
+    )
+
+    if method == "GET" and not task_id:
+        return response(200, {"message": "list tasks"})
+
+    if method == "GET" and task_id:
+        return response(200, {"message": "get task", "task_id": task_id})
+
+    if method == "POST" and not task_id:
+        body = json.loads(event.get("body") or "{}")
+        return response(201, {
+            "message": "create task",
+            "body": body,
+            "user": jwt_claims.get("email") or jwt_claims.get("sub")
+        })
+
+    if method == "PATCH" and task_id:
+        body = json.loads(event.get("body") or "{}")
+        return response(200, {
+            "message": "update task",
+            "task_id": task_id,
+            "body": body,
+            "user": jwt_claims.get("email") or jwt_claims.get("sub")
+        })
+
+    if method == "DELETE" and task_id:
+        return response(200, {
+            "message": "delete task",
+            "task_id": task_id,
+            "user": jwt_claims.get("email") or jwt_claims.get("sub")
+        })
+
+    return response(405, {"message": "Method not allowed"})
     
 def list_tasks():
     result = table.scan()
