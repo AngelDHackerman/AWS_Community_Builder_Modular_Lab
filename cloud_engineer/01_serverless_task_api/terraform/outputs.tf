@@ -57,3 +57,18 @@ output "tasks_table_arn" {
   description = "DynamoDB tasks table ARN"
   value       = aws_dynamodb_table.tasks.arn
 }
+
+output "cognito_user_pool_id" {
+  description = "El ID del User Pool de Cognito; se utiliza para identificar el directorio de usuarios en AWS."
+  value       = aws_cognito_user_pool.task_api_users.id
+}
+
+output "cognito_user_pool_issuer" {
+  description = "La URL del emisor (Issuer) del User Pool, requerida por el API Gateway Authorizer para validar la autenticidad de los tokens JWT."
+  value       = "https://cognito-idp.${var.aws_region}.amazonaws.com/${aws_cognito_user_pool.task_api_users.id}"
+}
+
+output "cognito_app_client_id" {
+  description = "El ID del App Client; es el identificador que el frontend o cliente móvil utiliza para interactuar con Cognito."
+  value       = aws_cognito_user_pool_client.task_api_client.id
+}
