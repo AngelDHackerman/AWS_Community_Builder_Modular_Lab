@@ -18,6 +18,7 @@ AUDIT_BUCKET_NAME = os.environ["AUDIT_BUCKET_NAME"]
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 
 table = dynamodb.Table(TASKS_TABLE_NAME)
+VALID_STATUS = {"pending", "in_progress", "done"}
 
 def now_utc() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -32,10 +33,16 @@ def response(status_code: int, body: dict):
         "body": json.dumps(body)
     }
 
+
+def error_response(status_code: int, message: str, **extra):
+    payload = {"message": message}
+    payload.update(extra)
+    return response(status_code, payload)
+
 def parse_body(event: dict) -> dict:
     body = event.get("body")
     if not body:
-        return{}
+        return {}
     return json.loads(body)
 
 def get_path_param(event: dict, key: str):
@@ -77,55 +84,30 @@ def audit_event(event_type: str, payload: dict):
         Body=json.dumps(document).encode("utf-8"),
         ContentType="application/json"
     )
-    
-def lambda_handler(event, context):
-    method = event["requestContext"]["http"]["method"]
-    path_params = event.get("pathParameters") or {}
-    task_id = path_params.get("task_id")
 
-    jwt_claims = (
-        event.get("requestContext", {})
-             .get("authorizer", {})
-             .get("jwt", {})
-             .get("claims", {})
-    )
 
-    if method == "GET" and not task_id:
-        return response(200, {"message": "list tasks"})
+def get_actor_sub(claims: dict) -> str:
+    return claims.get("sub", "unknown")
 
-    if method == "GET" and task_id:
-        return response(200, {"message": "get task", "task_id": task_id})
 
-    if method == "POST" and not task_id:
-        body = json.loads(event.get("body") or "{}")
-        return response(201, {
-            "message": "create task",
-            "body": body,
-            "user": jwt_claims.get("email") or jwt_claims.get("sub")
-        })
+def get_actor_username(claims: dict) -> str:
+    return claims.get("username") or claims.get("cognito:username") or claims.get("email", "unknown")
 
-    if method == "PATCH" and task_id:
-        body = json.loads(event.get("body") or "{}")
-        return response(200, {
-            "message": "update task",
-            "task_id": task_id,
-            "body": body,
-            "user": jwt_claims.get("email") or jwt_claims.get("sub")
-        })
 
-    if method == "DELETE" and task_id:
-        return response(200, {
-            "message": "delete task",
-            "task_id": task_id,
-            "user": jwt_claims.get("email") or jwt_claims.get("sub")
-        })
+def ensure_task_owner(task: dict, actor_sub: str):
+    if task.get("created_by") != actor_sub:
+        raise PermissionError("You are not allowed to modify this task")
 
-    return response(405, {"message": "Method not allowed"})
-    
+
+def get_task_item(task_id: str):
+    result = table.get_item(Key={"task_id": task_id})
+    return result.get("Item")
+
+
 def list_tasks():
     result = table.scan()
     items = result.get("Items", [])
-    
+
     return response(
         200,
         {
@@ -135,19 +117,14 @@ def list_tasks():
             "timestamp": now_utc()
         }
     )
-    
-def get_task (task_id: str):
-    result = table.get_item(Key={"task_id": task_id})
-    item = result.get("Item")
-    
-    if not item:
-        return response(404, {"message": "Task not found", "task_id": task_id})
 
-    audit_event(
-        event_type="task_retrieved",
-        payload={"task_id": task_id}
-    )
-    
+
+def get_task(task_id: str):
+    item = get_task_item(task_id)
+
+    if not item:
+        return error_response(404, "Task not found", task_id=task_id)
+
     return response(
         200,
         {
@@ -156,25 +133,26 @@ def get_task (task_id: str):
             "timestamp": now_utc()
         }
     )
-    
+
+
 def create_task(event: dict):
     claims = require_authenticated_claims(event)
     body = parse_body(event)
-    
+
     title = body.get("title")
     if not title or not isinstance(title, str):
         raise ValueError("Field 'title' is required and must be a string")
-    
+
     status = body.get("status", "pending")
-    if status not in {"pending", "in_progress", "done"}:
+    if status not in VALID_STATUS:
         raise ValueError("Field 'status' must be one of: pending, in_progress, done")
-    
+
     task_id = str(uuid.uuid4())
     ts = now_utc()
-    
-    actor_sub = claims.get("sub", "unknown")
-    actor_username = claims.get("username") or claims.get("cognito:username") or claims.get("email", "unknown")
-    
+
+    actor_sub = get_actor_sub(claims)
+    actor_username = get_actor_username(claims)
+
     item = {
         "task_id": task_id,
         "title": title,
@@ -184,9 +162,9 @@ def create_task(event: dict):
         "created_by": actor_sub,
         "created_by_username": actor_username
     }
-    
+
     table.put_item(Item=item)
-    
+
     audit_event(
         event_type="task_created",
         payload={
@@ -205,28 +183,35 @@ def create_task(event: dict):
             "timestamp": ts
         }
     )
-    
+
+
 def update_task(event: dict, task_id: str):
     claims = require_authenticated_claims(event)
     body = parse_body(event)
-    
+
     allowed_fields = {}
     if "title" in body:
         if not isinstance(body["title"], str) or not body["title"].strip():
             raise ValueError("Field 'title' must be a non-empty string")
-        allowed_fields["title"] = body["title"]
-        
+        allowed_fields["title"] = body["title"].strip()
+
     if "status" in body:
-        if body["status"] not in {"pending", "in_progress", "done"}:
+        if body["status"] not in VALID_STATUS:
             raise ValueError("Field 'status' must be one of: pending, in_progress, done")
         allowed_fields["status"] = body["status"]
-        
+
     if not allowed_fields:
         raise ValueError("Nothing to update. Provide 'title' and/or 'status'")
-    
-    actor_sub = claims.get("sub", "unknown")
+
+    actor_sub = get_actor_sub(claims)
+    existing = get_task_item(task_id)
+    if not existing:
+        return error_response(404, "Task not found", task_id=task_id)
+
+    ensure_task_owner(existing, actor_sub)
+
     ts = now_utc()
-    
+
     expr_attr_names = {
         "#updated_at": "updated_at",
         "#updated_by": "updated_by"
@@ -239,25 +224,20 @@ def update_task(event: dict, task_id: str):
         "#updated_at = :updated_at",
         "#updated_by = :updated_by"
     ]
-    
+
     for field, value in allowed_fields.items():
         expr_attr_names[f"#{field}"] = field
         expr_attr_values[f":{field}"] = value
         set_parts.append(f"#{field} = :{field}")
 
-    try:
-        result = table.update_item(
-            Key={"task_id": task_id},
-            UpdateExpression="SET " + ", ".join(set_parts),
-            ExpressionAttributeNames=expr_attr_names,
-            ExpressionAttributeValues=expr_attr_values,
-            ConditionExpression="attribute_exists(task_id)",
-            ReturnValues="ALL_NEW"
-        )
-    except ClientError as e:
-        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
-            return response(404, {"message": "Task not found", "task_id": task_id})
-        raise
+    result = table.update_item(
+        Key={"task_id": task_id},
+        UpdateExpression="SET " + ", ".join(set_parts),
+        ExpressionAttributeNames=expr_attr_names,
+        ExpressionAttributeValues=expr_attr_values,
+        ConditionExpression="attribute_exists(task_id)",
+        ReturnValues="ALL_NEW"
+    )
 
     updated_item = result["Attributes"]
 
@@ -279,14 +259,17 @@ def update_task(event: dict, task_id: str):
             "timestamp": ts
         }
     )
-    
+
+
 def delete_task(event: dict, task_id: str):
     claims = require_authenticated_claims(event)
-    actor_sub = claims.get("sub", "unknown")
+    actor_sub = get_actor_sub(claims)
 
-    existing = table.get_item(Key={"task_id": task_id}).get("Item")
+    existing = get_task_item(task_id)
     if not existing:
-        return response(404, {"message": "Task not found", "task_id": task_id})
+        return error_response(404, "Task not found", task_id=task_id)
+
+    ensure_task_owner(existing, actor_sub)
 
     table.delete_item(Key={"task_id": task_id})
 
@@ -307,3 +290,38 @@ def delete_task(event: dict, task_id: str):
             "timestamp": now_utc()
         }
     )
+
+
+def lambda_handler(event, context):
+    method = get_method(event)
+    task_id = get_path_param(event, "task_id")
+
+    try:
+        if method == "GET" and not task_id:
+            return list_tasks()
+
+        if method == "GET" and task_id:
+            return get_task(task_id)
+
+        if method == "POST" and not task_id:
+            return create_task(event)
+
+        if method == "PATCH" and task_id:
+            return update_task(event, task_id)
+
+        if method == "DELETE" and task_id:
+            return delete_task(event, task_id)
+
+        return error_response(405, "Method not allowed")
+    except PermissionError as exc:
+        return error_response(403, str(exc))
+    except json.JSONDecodeError:
+        return error_response(400, "Request body must be valid JSON")
+    except ValueError as exc:
+        return error_response(400, str(exc))
+    except ClientError:
+        logger.exception("AWS client error while processing request")
+        return error_response(500, "Internal server error")
+    except Exception:
+        logger.exception("Unhandled error while processing request")
+        return error_response(500, "Internal server error")
